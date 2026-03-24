@@ -172,4 +172,4 @@ This ensures Codex verifies its previous findings were actually addressed, not j
 5. **Validate output** — check scope/goal header matches expected review
 6. **Don't blindly apply** — Codex is a second opinion, evaluate critically
 7. **Never share secrets** — no .env values or API keys in prompts
-8. **Model override** — If `.codex-review.json` has a `"model"` field, pass it: `codex exec --model <model> ...`
+8. **Model + reasoning** — Default: `gpt-5.4` with `xhigh` reasoning. Override in `.codex-review.json` with `"model"` and `"reasoningEffort"`. Pass to codex: `codex exec --model <model> --reasoning-effort <effort> ...`. Available efforts: none, minimal, low, medium, high, xhigh

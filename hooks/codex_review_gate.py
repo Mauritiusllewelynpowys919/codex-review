@@ -44,6 +44,8 @@ DEFAULT_CONFIG = {
     "timeout": 120,
     "autoReview": True,
     "circuitBreaker": True,
+    "model": "gpt-5.4",
+    "reasoningEffort": "xhigh",
 }
 
 

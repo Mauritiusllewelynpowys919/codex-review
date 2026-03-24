@@ -20,7 +20,7 @@ Every time Claude writes a plan or changes code, Codex reviews it as a second op
 - **PR review mode** — Review pull requests with `gh pr diff` via `/codex-review`
 - **Review history** — Previous findings stored durably in `.claude/reviews/` (not just `/tmp`)
 - **Summary preview** — Hook shows the first 3 lines of Codex findings in context, so Claude sees the headline immediately
-- **Configurable model** — Set `"model": "o3"` in `.codex-review.json` to control which model Codex uses
+- **Configurable model** — Default `gpt-5.4` with `xhigh` reasoning effort. Override in `.codex-review.json`
 
 ## How it works
 
@@ -107,7 +107,8 @@ Create `.codex-review.json` in your project root to customize behavior:
   "timeout": 120,
   "autoReview": true,
   "circuitBreaker": true,
-  "model": "o3"
+  "model": "gpt-5.4",
+  "reasoningEffort": "xhigh"
 }
 ```
 
@@ -122,7 +123,8 @@ All fields are optional — sensible defaults are used for anything not specifie
 | `timeout` | `120` | Codex execution timeout in seconds |
 | `autoReview` | `true` | Automatically trigger reviews on file changes |
 | `circuitBreaker` | `true` | Block session exit if review pending |
-| `model` | *(Codex default)* | Override which model Codex uses (e.g. `"o3"`) |
+| `model` | `"gpt-5.4"` | Which model Codex uses (gpt-5.4, gpt-5.1-codex, gpt-4.1, o4-mini) |
+| `reasoningEffort` | `"xhigh"` | Reasoning effort level (none, minimal, low, medium, high, xhigh) |
 
 ## Review modes
 
