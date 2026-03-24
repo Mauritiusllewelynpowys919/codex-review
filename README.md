@@ -1,5 +1,7 @@
 # codex-review
 
+![codex-review banner](banner.png)
+
 **Automatic code review for Claude Code, powered by OpenAI Codex CLI.**
 
 Every time Claude writes a plan or changes code, Codex reviews it as a second opinion — like having a senior engineer look over Claude's shoulder.
