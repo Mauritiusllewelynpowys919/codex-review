@@ -14,6 +14,14 @@ Every time Claude writes a plan or changes code, Codex reviews it as a second op
 - **Blocks premature exit** — Circuit breaker prevents stopping with unreviewed changes
 - **Two review modes** — Plan review (strategy) and implementation review (code)
 
+## What's New in v2
+
+- **Multi-round reviews** — When you fix issues and re-review, Codex sees the previous findings and verifies they were addressed
+- **PR review mode** — Review pull requests with `gh pr diff` via `/codex-review`
+- **Review history** — Previous findings stored durably in `.claude/reviews/` (not just `/tmp`)
+- **Summary preview** — Hook shows the first 3 lines of Codex findings in context, so Claude sees the headline immediately
+- **Configurable model** — Set `"model": "o3"` in `.codex-review.json` to control which model Codex uses
+
 ## How it works
 
 ```
@@ -98,7 +106,8 @@ Create `.codex-review.json` in your project root to customize behavior:
   "promptPaths": ["/prompts/"],
   "timeout": 120,
   "autoReview": true,
-  "circuitBreaker": true
+  "circuitBreaker": true,
+  "model": "o3"
 }
 ```
 
@@ -113,6 +122,7 @@ All fields are optional — sensible defaults are used for anything not specifie
 | `timeout` | `120` | Codex execution timeout in seconds |
 | `autoReview` | `true` | Automatically trigger reviews on file changes |
 | `circuitBreaker` | `true` | Block session exit if review pending |
+| `model` | *(Codex default)* | Override which model Codex uses (e.g. `"o3"`) |
 
 ## Review modes
 

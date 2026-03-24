@@ -4,7 +4,7 @@ description: >
   Run OpenAI Codex CLI as a second-opinion reviewer. Automatically triggered
   by hooks after writing plans or implementing changes. Manual: /codex-review.
 user-invocable: true
-version: 1.0.0
+version: 2.0.0
 ---
 
 # Codex Review — Second Opinion
@@ -123,6 +123,46 @@ rm -f /tmp/codex-code-review.txt && codex exec \
 
 After: read output, validate scope header matches, fix legitimate issues, discard out-of-scope findings, tell user what Codex found.
 
+## Mode 3: PR Review (manual only)
+
+For reviewing pull requests. Not auto-triggered — use when asked to review a PR.
+
+First verify `gh` CLI is available: `which gh`
+
+```bash
+rm -f /tmp/codex-pr-review.txt && codex exec \
+  --full-auto --ephemeral \
+  -o /tmp/codex-pr-review.txt \
+  "Review PR #<number>. Run: gh pr diff <number>.
+  Also read the key changed files for full context.
+  Focus on: security (IDOR, auth bypass), data integrity
+  (race conditions, orphaned data), correctness, and regressions.
+
+  Output format:
+  PR: #<number> (<title>)
+  Files reviewed: <count>
+  Material findings:
+  - [high|medium] <file>:<line> - <issue>
+    Evidence: <what proves it>
+    Impact: <failure mode>
+    Fix: <smallest fix>
+  If no issues: No material issues found in PR."
+```
+
+## Multi-Round Reviews
+
+When re-reviewing after fixes (round 2+), the hook provides the path to previous findings.
+Include them in the prompt:
+
+```
+Previous review (round N-1) found these issues:
+<read contents of previous findings file>
+
+Check: were these issues addressed? Flag any that remain + any new issues introduced by the fixes.
+```
+
+This ensures Codex verifies its previous findings were actually addressed, not just that new code was written.
+
 ## Rules
 
 1. **Always `--full-auto --ephemeral`** — Codex runs headless, no interaction
@@ -132,3 +172,4 @@ After: read output, validate scope header matches, fix legitimate issues, discar
 5. **Validate output** — check scope/goal header matches expected review
 6. **Don't blindly apply** — Codex is a second opinion, evaluate critically
 7. **Never share secrets** — no .env values or API keys in prompts
+8. **Model override** — If `.codex-review.json` has a `"model"` field, pass it: `codex exec --model <model> ...`

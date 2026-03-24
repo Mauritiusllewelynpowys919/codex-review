@@ -10,6 +10,7 @@ Part of the codex-review plugin: https://github.com/hugotomita1201/codex-review
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -61,6 +62,12 @@ CONFIG = load_config()
 IMPL_EXTENSIONS = set(CONFIG["codeExtensions"])
 IGNORED_PREFIXES = tuple(CONFIG["ignorePaths"])
 SPECIAL_FILES = set(CONFIG["specialFiles"])
+REVIEWS_DIR = PROJECT_DIR / ".claude" / "reviews"
+
+
+def scope_hash(files: list[str]) -> str:
+    """Hash sorted file list to identify review scope."""
+    return hashlib.md5("|".join(sorted(files)).encode()).hexdigest()[:8]
 
 
 # ── State management ─────────────────────────────────────────────────
@@ -71,6 +78,9 @@ def default_state() -> dict[str, Any]:
         "plan_pending": False, "plan_files": [],
         "impl_pending": False, "impl_files": [],
         "bypass": False, "last_reviewed_at": None,
+        # v2: scoped review tracking
+        "plan_review": {"scope_hash": None, "round": 0, "previous_findings": None},
+        "impl_review": {"scope_hash": None, "round": 0, "previous_findings": None},
     }
 
 
@@ -91,9 +101,20 @@ def load_state() -> dict[str, Any]:
             "impl_files": raw.get("implementation_review", {}).get("files", []),
             "bypass": raw.get("review_bypass", {}).get("active", False),
             "last_reviewed_at": None,
+            "plan_review": {"scope_hash": None, "round": 0, "previous_findings": None},
+            "impl_review": {"scope_hash": None, "round": 0, "previous_findings": None},
         }
     state = default_state()
     state.update({k: v for k, v in raw.items() if k in state})
+    # Ensure nested review dicts have all expected keys
+    for key in ("plan_review", "impl_review"):
+        defaults = {"scope_hash": None, "round": 0, "previous_findings": None}
+        if isinstance(state.get(key), dict):
+            merged = dict(defaults)
+            merged.update(state[key])
+            state[key] = merged
+        else:
+            state[key] = defaults
     return state
 
 
@@ -185,6 +206,31 @@ def pending_lines(state: dict[str, Any]) -> list[str]:
     return lines
 
 
+# ── Review archive helpers ────────────────────────────────────────────
+
+def archive_review(output_path: str, review_type: str, state: dict) -> str | None:
+    """Copy codex output to durable location and return the path."""
+    src = Path(output_path)
+    if not src.exists() or src.stat().st_size == 0:
+        return None
+    review = state.get(f"{review_type}_review", {})
+    h = review.get("scope_hash", "unknown")
+    r = review.get("round", 1)
+    REVIEWS_DIR.mkdir(parents=True, exist_ok=True)
+    dest = REVIEWS_DIR / f"{review_type}-{h}-r{r}.txt"
+    shutil.copy2(str(src), str(dest))
+    return str(dest.relative_to(PROJECT_DIR))
+
+
+def read_summary(path: str, lines: int = 3) -> str:
+    """Read first N lines of a file for preview."""
+    try:
+        with open(path) as f:
+            return "\n".join(f.readline().rstrip() for _ in range(lines))
+    except (OSError, IOError):
+        return ""
+
+
 # ── Codex CLI check ──────────────────────────────────────────────────
 
 def check_codex_available() -> bool:
@@ -206,17 +252,37 @@ def handle_post_tool(payload: dict[str, Any], state: dict[str, Any]) -> str | No
         if plan_files:
             state["plan_pending"] = True
             state["plan_files"] = add_files(state["plan_files"], plan_files)
+            # v2: track scope hash and round
+            new_hash = scope_hash(state["plan_files"])
+            pr = state.setdefault("plan_review", {"scope_hash": None, "round": 0, "previous_findings": None})
+            if pr["scope_hash"] == new_hash:
+                pr["round"] += 1
+            else:
+                pr["scope_hash"] = new_hash
+                pr["round"] = 1
+            round_info = f" (round {pr['round']})" if pr["round"] > 1 else ""
+            prev_info = f" Previous findings: {pr['previous_findings']}" if pr["previous_findings"] else ""
             notes.append(
-                f"Codex plan review required. Mode: plan-review. "
-                f"Files: {fmt(plan_files)}. "
+                f"Codex plan review required{round_info}. Mode: plan-review. "
+                f"Files: {fmt(plan_files)}.{prev_info} "
                 'Run Skill({{ skill: "codex-review" }}) now.'
             )
         if impl_files:
             state["impl_pending"] = True
             state["impl_files"] = add_files(state["impl_files"], impl_files)
+            # v2: track scope hash and round
+            new_hash = scope_hash(state["impl_files"])
+            ir = state.setdefault("impl_review", {"scope_hash": None, "round": 0, "previous_findings": None})
+            if ir["scope_hash"] == new_hash:
+                ir["round"] += 1
+            else:
+                ir["scope_hash"] = new_hash
+                ir["round"] = 1
+            round_info = f" (round {ir['round']})" if ir["round"] > 1 else ""
+            prev_info = f" Previous findings: {ir['previous_findings']}" if ir["previous_findings"] else ""
             notes.append(
-                f"Codex implementation review required. Mode: impl-review. "
-                f"Changed files: {fmt(impl_files)}. "
+                f"Codex implementation review required{round_info}. Mode: impl-review. "
+                f"Changed files: {fmt(impl_files)}.{prev_info} "
                 'Run Skill({{ skill: "codex-review" }}) now. '
                 "Fill in Goal + Invariants before running."
             )
@@ -235,34 +301,76 @@ def handle_post_tool(payload: dict[str, Any], state: dict[str, Any]) -> str | No
                 return context("PostToolUse",
                     "Codex was stopped before completion. Output may be stale. Re-run if needed.")
 
+            # v2: parse -o <path> from command string
+            output_match = re.search(r"-o\s+(\S+)", cmd)
+            output_path = output_match.group(1) if output_match else None
+
             cleared: list[str] = []
+            archive_paths: list[str] = []
+            summary_lines: list[str] = []
+
             # Detect plan review completion
             if "plan" in cmd.lower() and state["plan_pending"]:
                 state["plan_pending"] = False
                 state["plan_files"] = []
                 state["last_reviewed_at"] = datetime.now(timezone.utc).isoformat()
                 cleared.append("plan review")
+                if output_path:
+                    archived = archive_review(output_path, "plan", state)
+                    if archived:
+                        archive_paths.append(archived)
+                        state["plan_review"]["previous_findings"] = archived
+                    preview = read_summary(output_path)
+                    if preview:
+                        summary_lines.append(preview)
             # Detect implementation review completion
             if ("code" in cmd.lower() or "targeted" in cmd.lower() or "impl" in cmd.lower()) and state["impl_pending"]:
                 state["impl_pending"] = False
                 state["impl_files"] = []
                 state["last_reviewed_at"] = datetime.now(timezone.utc).isoformat()
                 cleared.append("implementation review")
+                if output_path:
+                    archived = archive_review(output_path, "impl", state)
+                    if archived:
+                        archive_paths.append(archived)
+                        state["impl_review"]["previous_findings"] = archived
+                    preview = read_summary(output_path)
+                    if preview:
+                        summary_lines.append(preview)
             # Fallback: if codex exec completed and something was pending, clear it
             if not cleared and (state["plan_pending"] or state["impl_pending"]):
                 if state["plan_pending"]:
                     state["plan_pending"] = False
                     state["plan_files"] = []
                     cleared.append("plan review")
+                    if output_path:
+                        archived = archive_review(output_path, "plan", state)
+                        if archived:
+                            archive_paths.append(archived)
+                            state["plan_review"]["previous_findings"] = archived
                 if state["impl_pending"]:
                     state["impl_pending"] = False
                     state["impl_files"] = []
                     cleared.append("implementation review")
+                    if output_path:
+                        archived = archive_review(output_path, "impl", state)
+                        if archived:
+                            archive_paths.append(archived)
+                            state["impl_review"]["previous_findings"] = archived
                 state["last_reviewed_at"] = datetime.now(timezone.utc).isoformat()
+                if output_path:
+                    preview = read_summary(output_path)
+                    if preview:
+                        summary_lines.append(preview)
 
             if cleared and not state["bypass"]:
-                return context("PostToolUse",
-                    f"Codex {' and '.join(cleared)} complete. Evaluate findings and address issues.")
+                msg = f"Codex {' and '.join(cleared)} complete."
+                if archive_paths:
+                    msg += f" Archived to: {', '.join(archive_paths)}."
+                if summary_lines:
+                    msg += f"\nPreview:\n{chr(10).join(summary_lines)}"
+                msg += "\nEvaluate findings and address issues."
+                return context("PostToolUse", msg)
 
     return None
 
